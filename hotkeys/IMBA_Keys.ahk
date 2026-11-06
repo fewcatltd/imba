@@ -3,7 +3,8 @@
 ;  Нужен AutoHotkey v2: https://www.autohotkey.com  (запуск двойным кликом)
 ;
 ;  • Галочки можно включать и выключать в любой момент, прямо во время игры.
-;  • Клик по кнопке — нажми новую клавишу (Esc — отмена, Backspace — убрать).
+;  • Клик по кнопке — нажми новую клавишу, кнопку мыши (средняя, боковые) или
+;    крутни колесо (Esc — отмена, Backspace — убрать).
 ;  • Работает только когда активно окно Warcraft III. Закрыл окно — всё выключилось.
 ;  • Чат: после Enter клавиши печатаются как обычно, пока чат не закрыт.
 ;  • Shift + клавиша = то же с Shift (очередь приказов).
@@ -39,6 +40,10 @@ NAMES := Map("SC029", "~", "SC002", "1", "SC003", "2", "SC004", "3", "SC005", "4
     "SC017", "I", "SC018", "O", "SC019", "P", "SC01E", "A", "SC01F", "S", "SC020", "D", "SC021", "F",
     "SC022", "G", "SC023", "H", "SC024", "J", "SC025", "K", "SC026", "L", "SC02C", "Z", "SC02D", "X",
     "SC02E", "C", "SC02F", "V", "SC030", "B", "SC031", "N", "SC032", "M", "SC00F", "Tab", "SC039", "Space")
+
+; кнопки мыши, которые можно назначать (левая/правая — нет, ими кликают по окну)
+MOUSE := Map("MButton", "Mouse3", "XButton1", "Mouse4", "XButton2", "Mouse5",
+             "WheelUp", "Wheel ↑", "WheelDown", "Wheel ↓")
 
 keys := Map()
 for it in INV
@@ -89,6 +94,8 @@ ToSC(k) {
         return ""
     if RegExMatch(k, "i)^SC[0-9A-F]+$")
         return StrUpper(k)
+    if MOUSE.Has(k)
+        return k
     if (k = "``" || k = "~")                          ; при русской раскладке по символу не находится
         return "SC029"
     sc := GetKeySC(k)
@@ -100,6 +107,8 @@ Pretty(k) {
         return "—"
     if NAMES.Has(k)
         return NAMES[k]
+    if MOUSE.Has(k)
+        return MOUSE[k]
     n := GetKeyName(k)
     return n = "" ? k : (StrLen(n) = 1 ? StrUpper(n) : n)
 }
@@ -122,12 +131,24 @@ BindKey(id, *) {
         got := sc
         h.Stop()
     }
+    MouseCap(name, *) {                              ; кнопка мыши / колесо
+        got := name
+        ih.Stop()
+    }
+    HotIf
+    for m in MOUSE
+        Hotkey m, MouseCap.Bind(m), "On"
     ih.Start(), ih.Wait()
+    for m in MOUSE
+        Hotkey m, "Off"
     if (!got || got = 0x01) {                        ; таймаут или Esc — отмена
         b.Text := Pretty(keys[id])
         return
     }
-    k := (got = 0x0E || got = 0x153) ? "" : Format("SC{:03X}", got)   ; Backspace / Delete — убрать
+    if (Type(got) = "String")
+        k := got
+    else
+        k := (got = 0x0E || got = 0x153) ? "" : Format("SC{:03X}", got)   ; Backspace / Delete — убрать
     if (k != "") {                                    ; одна клавиша — одна кнопка
         for oid, ok in keys
             if (oid != id && ok = k) {
