@@ -23,12 +23,12 @@ GroupAdd "wc3", "ahk_exe war3.exe"
 INI := A_ScriptDir "\IMBA_Keys.ini"
 
 ; ---- инвентарь: id -> [клавиша WC3, по умолчанию]
-INV := [["inv1", "Numpad7", "F2"], ["inv2", "Numpad8", "F3"],
-        ["inv3", "Numpad4", "``"], ["inv4", "Numpad5", "1"],
-        ["inv5", "Numpad1", "Tab"], ["inv6", "Numpad2", "Space"]]
+INV := [["inv1", "Numpad7", "SC03C"], ["inv2", "Numpad8", "SC03D"],
+        ["inv3", "Numpad4", "SC029"], ["inv4", "Numpad5", "SC002"],
+        ["inv5", "Numpad1", "SC00F"], ["inv6", "Numpad2", "SC039"]]
 ; ---- способности: id -> [ряд, колонка, по умолчанию]; ряд 1 = верхний (Move/Stop/Hold/Attack)
-ABL := [["a21", 2, 1, ""], ["a22", 2, 2, "d"], ["a23", 2, 3, "f"], ["a24", 2, 4, ""],
-        ["a31", 3, 1, "q"], ["a32", 3, 2, "w"], ["a33", 3, 3, "e"], ["a34", 3, 4, "r"]]
+ABL := [["a21", 2, 1, ""], ["a22", 2, 2, "SC020"], ["a23", 2, 3, "SC021"], ["a24", 2, 4, ""],
+        ["a31", 3, 1, "SC010"], ["a32", 3, 2, "SC011"], ["a33", 3, 3, "SC012"], ["a34", 3, 4, "SC013"]]
 ; авто-положение панели команд (доли клиентской области окна): центры левой верхней и правой нижней кнопок
 AUTO := [0.7994, 0.8040, 0.9606, 0.9475]
 
@@ -89,6 +89,8 @@ ToSC(k) {
         return ""
     if RegExMatch(k, "i)^SC[0-9A-F]+$")
         return StrUpper(k)
+    if (k = "``" || k = "~")                          ; при русской раскладке по символу не находится
+        return "SC029"
     sc := GetKeySC(k)
     return sc ? Format("SC{:03X}", sc) : ""
 }
@@ -111,15 +113,21 @@ Changed(*) {
 BindKey(id, *) {
     b := btn[id]
     b.Text := "..."
+    got := 0
     ih := InputHook("T5")
-    ih.KeyOpt("{All}", "ES")
-    ih.KeyOpt("{LCtrl}{RCtrl}{LAlt}{RAlt}{LShift}{RShift}{LWin}{RWin}", "-E-S")
+    ih.KeyOpt("{All}", "NS")                         ; ловим любую клавишу и не пускаем её дальше
+    ih.KeyOpt("{LCtrl}{RCtrl}{LAlt}{RAlt}{LShift}{RShift}{LWin}{RWin}", "-N-S")
+    ih.OnKeyDown := OnKD
+    OnKD(h, vk, sc) {                                ; скан-код берём прямо из нажатия — без раскладки
+        got := sc
+        h.Stop()
+    }
     ih.Start(), ih.Wait()
-    if (ih.EndReason != "EndKey" || ih.EndKey = "Escape") {
+    if (!got || got = 0x01) {                        ; таймаут или Esc — отмена
         b.Text := Pretty(keys[id])
         return
     }
-    k := (ih.EndKey = "Backspace" || ih.EndKey = "Delete") ? "" : Format("SC{:03X}", ih.EndSC)
+    k := (got = 0x0E || got = 0x153) ? "" : Format("SC{:03X}", got)   ; Backspace / Delete — убрать
     if (k != "") {                                    ; одна клавиша — одна кнопка
         for oid, ok in keys
             if (oid != id && ok = k) {
