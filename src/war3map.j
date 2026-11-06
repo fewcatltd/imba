@@ -108205,10 +108205,10 @@ call DPV(Player($D),'CJ28',20)
 call DPV(Player($D),'CJ33',50)
 call TimerStart(CreateTimer(),1,false,function VMI)
 call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,20," ")
-call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,20,"|c001e90ffHotfix|r by glembelbi  (|c00ff0000Version|r |c0000ff005.1g|r)")
+call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,20,"|c001e90ffHotfix|r by glembelbi  (|c00ff0000Version|r |c0000ff005.1h|r)")
 call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,20,"|c001e90ffADDED|r:")
-call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,20,"    |c0000ff00-zoom|r - camera zoom out up to 2500")
-call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,20,"    |c0000ff00-zoom 1800|r - any value 600-2500, |c0000ff00-zoom 0|r - default camera")
+call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,20,"    Camera distance |c0000ff003000|r by default. |c0000ff00-zoom 3500|r - any value 600-4000")
+call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,20,"    |c0000ff00-zoom|r - back to 3000, |c0000ff00-zoom 0|r - standard WC3 camera")
 call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,20,"By |c0000ff00boga_imbi_net|r")
 call DisplayTimedTextToPlayer(GetLocalPlayer(),0,0,20," ")
 call ExecuteFunc("A2X")
@@ -111487,7 +111487,7 @@ call DisplayTextToForce(bj_FORCE_ALL_PLAYERS,"--------Switching  is  now  on !!!
 set SWAPON=true
 endfunction
 
-// IMBA131: -zoom [N]  camera distance for the typing player only (local, no desync). Max 2500, "-zoom 0" = default 1650
+// IMBA131: -zoom [N]  camera distance for the typing player only (local, no desync). Default 3000 from game start, max 4000, "-zoom" = 3000, "-zoom 0" = WC3 default 1650
 function IMBA131_ZoomSet takes real d returns nothing
 call SetCameraField(CAMERA_FIELD_TARGET_DISTANCE,d,0)
 if d>1650 then
@@ -111507,7 +111507,7 @@ endfunction
 function IMBA131_ZoomCmd takes nothing returns boolean
 local string s=GetEventPlayerChatString()
 local integer id=GetPlayerId(GetTriggerPlayer())
-local real d=2500
+local real d=3000
 if SubString(s,0,5)!="-zoom" then
 return false
 endif
@@ -111521,8 +111521,8 @@ call IMBA131_ZoomSet(1650)
 endif
 return false
 endif
-if d>2500 then
-set d=2500
+if d>4000 then
+set d=4000
 elseif d<600 then
 set d=600
 endif
@@ -111538,6 +111538,7 @@ local integer i=0
 loop
 exitwhen i>11
 call TriggerRegisterPlayerChatEvent(t,Player(i),"-zoom",false)
+set IMBA131_Zoom[i]=3000
 set i=i+1
 endloop
 call TriggerAddCondition(t,Condition(function IMBA131_ZoomCmd))
