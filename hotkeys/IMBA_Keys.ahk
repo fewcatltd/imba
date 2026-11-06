@@ -1,0 +1,234 @@
+; =====================================================================
+;  IMBA Keys — клавиши инвентаря и способностей, как в лаунчере iCCup.
+;  Нужен AutoHotkey v2: https://www.autohotkey.com  (запуск двойным кликом)
+;
+;  • Галочки можно включать и выключать в любой момент, прямо во время игры.
+;  • Клик по кнопке — нажми новую клавишу (Esc — отмена, Backspace — убрать).
+;  • Работает только когда активно окно Warcraft III. Закрыл окно — всё выключилось.
+;  • Чат: после Enter клавиши печатаются как обычно, пока чат не закрыт.
+;  • Shift + клавиша = то же с Shift (очередь приказов).
+;
+;  Инвентарь: шлёт родные клавиши WC3 (Numpad 7 8 4 5 1 2), калибровка не нужна.
+;  Способности: кликает по ячейке панели команд. Положение панели вычисляется
+;  по размеру окна; если клики промахиваются — «Калибровать».
+; =====================================================================
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+SendMode "Input"
+CoordMode "Mouse", "Client"
+CoordMode "ToolTip", "Screen"
+GroupAdd "wc3", "ahk_exe Warcraft III.exe"
+GroupAdd "wc3", "ahk_exe war3.exe"
+
+INI := A_ScriptDir "\IMBA_Keys.ini"
+
+; ---- инвентарь: id -> [клавиша WC3, по умолчанию]
+INV := [["inv1", "Numpad7", "F2"], ["inv2", "Numpad8", "F3"],
+        ["inv3", "Numpad4", "``"], ["inv4", "Numpad5", "1"],
+        ["inv5", "Numpad1", "Tab"], ["inv6", "Numpad2", "Space"]]
+; ---- способности: id -> [ряд, колонка, по умолчанию]; ряд 1 = верхний (Move/Stop/Hold/Attack)
+ABL := [["a21", 2, 1, ""], ["a22", 2, 2, "d"], ["a23", 2, 3, "f"], ["a24", 2, 4, ""],
+        ["a31", 3, 1, "q"], ["a32", 3, 2, "w"], ["a33", 3, 3, "e"], ["a34", 3, 4, "r"]]
+; авто-положение панели команд (доли клиентской области окна): центры левой верхней и правой нижней кнопок
+AUTO := [0.7994, 0.8040, 0.9606, 0.9475]
+
+keys := Map()
+for it in INV
+    keys[it[1]] := IniRead(INI, "keys", it[1], it[3])
+for it in ABL
+    keys[it[1]] := IniRead(INI, "keys", it[1], it[4])
+calib := IniRead(INI, "grid", "calib", "")      ; "x1,y1,x2,y2" в пикселях клиента или пусто = авто
+chat := false
+active := Map()
+
+; ------------------------------- GUI -------------------------------
+g := Gui("-MaximizeBox", "IMBA Keys")
+g.SetFont("s10", "Segoe UI")
+btn := Map()
+
+invOn := g.AddCheckbox("x15 y12 w200", "Клавиши инвентаря")
+invOn.Value := Integer(IniRead(INI, "on", "inv", 1))
+invOn.OnEvent("Click", Changed)
+for i, it in INV {
+    col := Mod(i - 1, 2), row := (i - 1) // 2
+    b := g.AddButton(Format("x{} y{} w60 h40", 15 + col * 64, 40 + row * 44), Pretty(keys[it[1]]))
+    b.OnEvent("Click", BindKey.Bind(it[1]))
+    btn[it[1]] := b
+}
+
+ablOn := g.AddCheckbox("x170 y12 w220", "Клавиши способностей")
+ablOn.Value := Integer(IniRead(INI, "on", "abl", 1))
+ablOn.OnEvent("Click", Changed)
+for it in ABL {
+    b := g.AddButton(Format("x{} y{} w52 h40", 170 + (it[3] - 1) * 56, 40 + (it[2] - 2) * 44), Pretty(keys[it[1]]))
+    b.OnEvent("Click", BindKey.Bind(it[1]))
+    btn[it[1]] := b
+}
+g.AddText("x170 y132 w225 cGray", "ряд 2 и ряд 3 панели команд")
+
+g.AddButton("x15 y170 w120 h30", "Калибровать").OnEvent("Click", StartCalib)
+g.AddButton("x140 y170 w120 h30", "Авто-позиция").OnEvent("Click", ResetCalib)
+status := g.AddText("x15 y208 w380 cGray", "")
+g.OnEvent("Close", (*) => ExitApp())
+g.Show("w410 h235")
+ShowStatus()
+Rebind()
+
+; ------------------------------ логика ------------------------------
+Pretty(k) {
+    if (k = "")
+        return "—"
+    if (k = "``")
+        return "~"
+    return StrLen(k) = 1 ? StrUpper(k) : k
+}
+
+Changed(*) {
+    IniWrite invOn.Value, INI, "on", "inv"
+    IniWrite ablOn.Value, INI, "on", "abl"
+    Rebind()
+}
+
+BindKey(id, *) {
+    b := btn[id]
+    b.Text := "..."
+    ih := InputHook("T5")
+    ih.KeyOpt("{All}", "ES")
+    ih.KeyOpt("{LCtrl}{RCtrl}{LAlt}{RAlt}{LShift}{RShift}{LWin}{RWin}", "-E-S")
+    ih.Start(), ih.Wait()
+    k := ih.EndReason = "EndKey" ? ih.EndKey : "Escape"
+    if (k = "Escape") {
+        b.Text := Pretty(keys[id])
+        return
+    }
+    if (k = "Backspace" || k = "Delete")
+        k := ""
+    if (StrLen(k) = 1)
+        k := StrLower(k)
+    if (k != "") {                                    ; одна клавиша — одна кнопка
+        for oid, ok in keys
+            if (oid != id && ok = k) {
+                keys[oid] := ""
+                btn[oid].Text := "—"
+                IniWrite "", INI, "keys", oid
+            }
+    }
+    keys[id] := k
+    b.Text := Pretty(k)
+    IniWrite k, INI, "keys", id
+    Rebind()
+}
+
+Rebind() {
+    global active
+    HotIfWinActive "ahk_group wc3"
+    for hk in active
+        Hotkey hk, "Off"
+    active := Map()
+    if invOn.Value
+        for it in INV
+            Add(keys[it[1]], InvPress.Bind(it[2]))
+    if ablOn.Value
+        for it in ABL
+            Add(keys[it[1]], AblPress.Bind(it[2], it[3]))
+    for hk in ["~*Enter", "~*NumpadEnter"]
+        Hotkey hk, ToggleChat, "On"
+    Hotkey "~*Esc", (*) => SetChat(false), "On"
+    HotIf
+}
+
+Add(k, fn) {
+    if (k = "")
+        return
+    for hk in [k, "+" k] {                          ; без Ctrl/Alt — Alt+Tab и прочее не трогаем
+        Hotkey hk, fn, "On"
+        active[hk] := 1
+    }
+}
+
+PassThrough(hk) {
+    k := RegExReplace(hk, "^\+")
+    Send "{Blind}{" k "}"
+}
+
+InvPress(nk, hk) {
+    if chat
+        return PassThrough(hk)
+    if !GetKeyState("NumLock", "T")                 ; предметы WC3 = цифры на Numpad, нужен NumLock
+        SetNumLockState "On"
+    Send "{Blind}{" nk "}"
+}
+
+AblPress(r, c, hk) {
+    if chat
+        return PassThrough(hk)
+    p := CellXY(r, c)
+    if !p
+        return PassThrough(hk)
+    MouseGetPos &mx, &my
+    Click p[1] " " p[2]
+    MouseMove mx, my, 0
+}
+
+CellXY(r, c) {
+    if calib != "" {
+        a := StrSplit(calib, ",")
+        x1 := a[1], y1 := a[2], x2 := a[3], y2 := a[4]
+    } else {
+        try WinGetClientPos , , &w, &h, "A"
+        catch
+            return 0
+        x1 := w * AUTO[1], y1 := h * AUTO[2], x2 := w * AUTO[3], y2 := h * AUTO[4]
+    }
+    return [Round(x1 + (c - 1) * (x2 - x1) / 3), Round(y1 + (r - 1) * (y2 - y1) / 2)]
+}
+
+ToggleChat(*) {
+    global chat
+    chat := !chat
+}
+SetChat(v) {
+    global chat
+    chat := v
+}
+
+; ----------------------------- калибровка -----------------------------
+calStep := 0, calP := []
+StartCalib(*) {
+    global calStep, calP
+    calStep := 1, calP := []
+    HotIfWinActive "ahk_group wc3"
+    Hotkey "F8", CalibPoint, "On"
+    HotIf
+    status.Text := "Калибровка: в игре выбери героя, наведи на ЦЕНТР левой верхней кнопки (Двигаться) и нажми F8"
+}
+CalibPoint(*) {
+    global calStep, calP, calib
+    MouseGetPos &mx, &my
+    calP.Push(mx, my)
+    if calStep = 1 {
+        calStep := 2
+        status.Text := "Теперь наведи на ЦЕНТР правой нижней кнопки панели и нажми F8"
+        ToolTip "Точка 1 сохранена. Теперь правая нижняя кнопка + F8", 10, 10
+        SetTimer () => ToolTip(), -2500
+        return
+    }
+    calib := calP[1] "," calP[2] "," calP[3] "," calP[4]
+    IniWrite calib, INI, "grid", "calib"
+    calStep := 0
+    HotIfWinActive "ahk_group wc3"
+    Hotkey "F8", "Off"
+    HotIf
+    ToolTip "Калибровка сохранена", 10, 10
+    SetTimer () => ToolTip(), -2000
+    ShowStatus()
+}
+ResetCalib(*) {
+    global calib
+    calib := ""
+    IniWrite "", INI, "grid", "calib"
+    ShowStatus()
+}
+ShowStatus() {
+    status.Text := calib = "" ? "Панель команд: авто-позиция по размеру окна" : "Панель команд: откалибровано (" calib ")"
+}
