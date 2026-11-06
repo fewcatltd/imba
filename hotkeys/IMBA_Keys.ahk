@@ -32,11 +32,19 @@ ABL := [["a21", 2, 1, ""], ["a22", 2, 2, "d"], ["a23", 2, 3, "f"], ["a24", 2, 4,
 ; авто-положение панели команд (доли клиентской области окна): центры левой верхней и правой нижней кнопок
 AUTO := [0.7994, 0.8040, 0.9606, 0.9475]
 
+; подписи на кнопках — по английской раскладке
+NAMES := Map("SC029", "~", "SC002", "1", "SC003", "2", "SC004", "3", "SC005", "4", "SC006", "5",
+    "SC007", "6", "SC008", "7", "SC009", "8", "SC00A", "9", "SC00B", "0",
+    "SC010", "Q", "SC011", "W", "SC012", "E", "SC013", "R", "SC014", "T", "SC015", "Y", "SC016", "U",
+    "SC017", "I", "SC018", "O", "SC019", "P", "SC01E", "A", "SC01F", "S", "SC020", "D", "SC021", "F",
+    "SC022", "G", "SC023", "H", "SC024", "J", "SC025", "K", "SC026", "L", "SC02C", "Z", "SC02D", "X",
+    "SC02E", "C", "SC02F", "V", "SC030", "B", "SC031", "N", "SC032", "M", "SC00F", "Tab", "SC039", "Space")
+
 keys := Map()
 for it in INV
-    keys[it[1]] := IniRead(INI, "keys", it[1], it[3])
+    keys[it[1]] := ToSC(IniRead(INI, "keys", it[1], it[3]))
 for it in ABL
-    keys[it[1]] := IniRead(INI, "keys", it[1], it[4])
+    keys[it[1]] := ToSC(IniRead(INI, "keys", it[1], it[4]))
 calib := IniRead(INI, "grid", "calib", "")      ; "x1,y1,x2,y2" в пикселях клиента или пусто = авто
 chat := false
 active := Map()
@@ -75,12 +83,23 @@ ShowStatus()
 Rebind()
 
 ; ------------------------------ логика ------------------------------
+; все клавиши храним как скан-коды (SC0xx): не зависит от раскладки (RU/EN) и от спецсимволов
+ToSC(k) {
+    if (k = "")
+        return ""
+    if RegExMatch(k, "i)^SC[0-9A-F]+$")
+        return StrUpper(k)
+    sc := GetKeySC(k)
+    return sc ? Format("SC{:03X}", sc) : ""
+}
+
 Pretty(k) {
     if (k = "")
         return "—"
-    if (k = "``")
-        return "~"
-    return StrLen(k) = 1 ? StrUpper(k) : k
+    if NAMES.Has(k)
+        return NAMES[k]
+    n := GetKeyName(k)
+    return n = "" ? k : (StrLen(n) = 1 ? StrUpper(n) : n)
 }
 
 Changed(*) {
@@ -96,15 +115,11 @@ BindKey(id, *) {
     ih.KeyOpt("{All}", "ES")
     ih.KeyOpt("{LCtrl}{RCtrl}{LAlt}{RAlt}{LShift}{RShift}{LWin}{RWin}", "-E-S")
     ih.Start(), ih.Wait()
-    k := ih.EndReason = "EndKey" ? ih.EndKey : "Escape"
-    if (k = "Escape") {
+    if (ih.EndReason != "EndKey" || ih.EndKey = "Escape") {
         b.Text := Pretty(keys[id])
         return
     }
-    if (k = "Backspace" || k = "Delete")
-        k := ""
-    if (StrLen(k) = 1)
-        k := StrLower(k)
+    k := (ih.EndKey = "Backspace" || ih.EndKey = "Delete") ? "" : Format("SC{:03X}", ih.EndSC)
     if (k != "") {                                    ; одна клавиша — одна кнопка
         for oid, ok in keys
             if (oid != id && ok = k) {
