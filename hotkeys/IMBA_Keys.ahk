@@ -9,14 +9,16 @@
 ;  • Чат: после Enter клавиши печатаются как обычно, пока чат не закрыт.
 ;  • Shift + клавиша = то же с Shift (очередь приказов).
 ;
-;  Инвентарь: шлёт родные клавиши WC3 (Numpad 7 8 4 5 1 2), калибровка не нужна.
-;  Способности: кликает по ячейке панели команд. Положение панели вычисляется
-;  по размеру окна; если клики промахиваются — «Калибровать».
+;  Инвентарь: шлёт родные клавиши WC3 (Numpad 7 8 4 5 1 2).
+;  Способности: шлёт букву ячейки (низ Q W E R, середина T D F, «Изучить» O).
+;  Чтобы у скиллов IMBA были именно эти буквы, нужна галочка «Буквы по ячейкам»:
+;  она кладёт CustomKeys_IMBA.txt как Документы\Warcraft III\CustomKeys.txt
+;  (твой старый CustomKeys.txt уходит в .backup и возвращается при выключении).
+;  Перед другими картами (DotA и т.д.) эту галочку снимай — файл действует на все карты.
 ; =====================================================================
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 SendMode "Input"
-CoordMode "Mouse", "Client"
 CoordMode "ToolTip", "Screen"
 GroupAdd "wc3", "ahk_exe Warcraft III.exe"
 GroupAdd "wc3", "ahk_exe war3.exe"
@@ -27,11 +29,13 @@ INI := A_ScriptDir "\IMBA_Keys.ini"
 INV := [["inv1", "Numpad7", "SC03C"], ["inv2", "Numpad8", "SC03D"],
         ["inv3", "Numpad4", "SC029"], ["inv4", "Numpad5", "SC002"],
         ["inv5", "Numpad1", "SC00F"], ["inv6", "Numpad2", "SC039"]]
-; ---- способности: id -> [ряд, колонка, по умолчанию]; ряд 1 = верхний (Move/Stop/Hold/Attack)
-ABL := [["a21", 2, 1, ""], ["a22", 2, 2, "SC020"], ["a23", 2, 3, "SC021"], ["a24", 2, 4, ""],
-        ["a31", 3, 1, "SC010"], ["a32", 3, 2, "SC011"], ["a33", 3, 3, "SC012"], ["a34", 3, 4, "SC013"]]
-; авто-положение панели команд (доли клиентской области окна): центры левой верхней и правой нижней кнопок
-AUTO := [0.7994, 0.8040, 0.9606, 0.9475]
+; ---- способности: id -> [ряд, колонка, буква ячейки, по умолчанию]
+;      ряд 2: T D F O(«Изучить»), ряд 3: Q W E R — такие буквы даёт CustomKeys_IMBA.txt
+ABL := [["a21", 2, 1, "SC014", ""], ["a22", 2, 2, "SC020", "SC020"], ["a23", 2, 3, "SC021", "SC021"], ["a24", 2, 4, "SC018", ""],
+        ["a31", 3, 1, "SC010", "SC010"], ["a32", 3, 2, "SC011", "SC011"], ["a33", 3, 3, "SC012", "SC012"], ["a34", 3, 4, "SC013", "SC013"]]
+CK_SRC := A_ScriptDir "\CustomKeys_IMBA.txt"
+CK_DST := A_MyDocuments "\Warcraft III\CustomKeys.txt"
+CK_TAG := "IMBA Legends"
 
 ; подписи на кнопках — по английской раскладке
 NAMES := Map("SC029", "~", "SC002", "1", "SC003", "2", "SC004", "3", "SC005", "4", "SC006", "5",
@@ -49,8 +53,7 @@ keys := Map()
 for it in INV
     keys[it[1]] := ToSC(IniRead(INI, "keys", it[1], it[3]))
 for it in ABL
-    keys[it[1]] := ToSC(IniRead(INI, "keys", it[1], it[4]))
-calib := IniRead(INI, "grid", "calib", "")      ; "x1,y1,x2,y2" в пикселях клиента или пусто = авто
+    keys[it[1]] := ToSC(IniRead(INI, "keys", it[1], it[5]))
 chat := false
 active := Map()
 
@@ -79,11 +82,12 @@ for it in ABL {
 }
 g.AddText("x170 y132 w225 cGray", "ряд 2 и ряд 3 панели команд")
 
-g.AddButton("x15 y170 w120 h30", "Калибровать").OnEvent("Click", StartCalib)
-g.AddButton("x140 y170 w120 h30", "Авто-позиция").OnEvent("Click", ResetCalib)
-status := g.AddText("x15 y208 w380 cGray", "")
+ckOn := g.AddCheckbox("x15 y170 w380", "Буквы по ячейкам (CustomKeys для IMBA)")
+ckOn.Value := IsOurCK() ? 1 : 0
+ckOn.OnEvent("Click", ToggleCK)
+status := g.AddText("x15 y196 w385 h36 cGray", "")
 g.OnEvent("Close", (*) => ExitApp())
-g.Show("w410 h235")
+g.Show("w410 h240")
 ShowStatus()
 Rebind()
 
@@ -174,7 +178,7 @@ Rebind() {
             Add(keys[it[1]], InvPress.Bind(it[2]))
     if ablOn.Value
         for it in ABL
-            Add(keys[it[1]], AblPress.Bind(it[2], it[3]))
+            Add(keys[it[1]], AblPress.Bind(it[4]))
     for hk in ["~*Enter", "~*NumpadEnter"]
         Hotkey hk, ToggleChat, "On"
     Hotkey "~*Esc", (*) => SetChat(false), "On"
@@ -203,28 +207,10 @@ InvPress(nk, hk) {
     Send "{Blind}{" nk "}"
 }
 
-AblPress(r, c, hk) {
+AblPress(letter, hk) {
     if chat
         return PassThrough(hk)
-    p := CellXY(r, c)
-    if !p
-        return PassThrough(hk)
-    MouseGetPos &mx, &my
-    Click p[1] " " p[2]
-    MouseMove mx, my, 0
-}
-
-CellXY(r, c) {
-    if calib != "" {
-        a := StrSplit(calib, ",")
-        x1 := a[1], y1 := a[2], x2 := a[3], y2 := a[4]
-    } else {
-        try WinGetClientPos , , &w, &h, "A"
-        catch
-            return 0
-        x1 := w * AUTO[1], y1 := h * AUTO[2], x2 := w * AUTO[3], y2 := h * AUTO[4]
-    }
-    return [Round(x1 + (c - 1) * (x2 - x1) / 3), Round(y1 + (r - 1) * (y2 - y1) / 2)]
+    Send "{Blind}{" letter "}"
 }
 
 ToggleChat(*) {
@@ -236,43 +222,34 @@ SetChat(v) {
     chat := v
 }
 
-; ----------------------------- калибровка -----------------------------
-calStep := 0, calP := []
-StartCalib(*) {
-    global calStep, calP
-    calStep := 1, calP := []
-    HotIfWinActive "ahk_group wc3"
-    Hotkey "F8", CalibPoint, "On"
-    HotIf
-    status.Text := "Калибровка: в игре выбери героя, наведи на ЦЕНТР левой верхней кнопки (Двигаться) и нажми F8"
+; ------------------------- CustomKeys (буквы по ячейкам) -------------------------
+IsOurCK() {
+    try return FileExist(CK_DST) && InStr(FileRead(CK_DST), CK_TAG)
+    return false
 }
-CalibPoint(*) {
-    global calStep, calP, calib
-    MouseGetPos &mx, &my
-    calP.Push(mx, my)
-    if calStep = 1 {
-        calStep := 2
-        status.Text := "Теперь наведи на ЦЕНТР правой нижней кнопки панели и нажми F8"
-        ToolTip "Точка 1 сохранена. Теперь правая нижняя кнопка + F8", 10, 10
-        SetTimer () => ToolTip(), -2500
-        return
+ToggleCK(*) {
+    try {
+        if ckOn.Value {
+            if !FileExist(CK_SRC)
+                throw Error("рядом с программой нет файла CustomKeys_IMBA.txt")
+            DirCreate A_MyDocuments "\Warcraft III"
+            if (FileExist(CK_DST) && !IsOurCK())
+                FileMove CK_DST, CK_DST ".backup", 1        ; твой файл — в резерв
+            FileCopy CK_SRC, CK_DST, 1
+        } else {
+            if IsOurCK()
+                FileDelete CK_DST
+            if FileExist(CK_DST ".backup")
+                FileMove CK_DST ".backup", CK_DST, 1        ; вернуть твой файл
+        }
+    } catch as e {
+        ckOn.Value := IsOurCK() ? 1 : 0
+        MsgBox "Не получилось: " e.Message, "IMBA Keys", 48
     }
-    calib := calP[1] "," calP[2] "," calP[3] "," calP[4]
-    IniWrite calib, INI, "grid", "calib"
-    calStep := 0
-    HotIfWinActive "ahk_group wc3"
-    Hotkey "F8", "Off"
-    HotIf
-    ToolTip "Калибровка сохранена", 10, 10
-    SetTimer () => ToolTip(), -2000
-    ShowStatus()
-}
-ResetCalib(*) {
-    global calib
-    calib := ""
-    IniWrite "", INI, "grid", "calib"
     ShowStatus()
 }
 ShowStatus() {
-    status.Text := calib = "" ? "Панель команд: авто-позиция по размеру окна" : "Панель команд: откалибровано (" calib ")"
+    status.Text := IsOurCK()
+        ? "Буквы по ячейкам: ВКЛ. Если игра уже запущена — перезапусти её. Перед DotA и другими картами сними галочку."
+        : "Буквы по ячейкам: выкл (у скиллов родные буквы карты)."
 }
