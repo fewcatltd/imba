@@ -1,3 +1,4 @@
 *.w3x binary
 *.w3i binary
 *.j -text
+*.ahk text eol=crlf
